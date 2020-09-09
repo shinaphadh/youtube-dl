@@ -445,14 +445,6 @@ class PornHubUserIE(PornHubPlaylistBaseIE):
 
 
 class PornHubPagedPlaylistBaseIE(PornHubPlaylistBaseIE):
-    @staticmethod
-    def _has_more(webpage):
-        return re.search(
-            r'''(?x)
-                <li[^>]+\bclass=["\']page_next|
-                <link[^>]+\brel=["\']next|
-                <button[^>]+\bid=["\']moreDataBtn
-            ''', webpage) is not None
 
     def _real_extract(self, url):
         mobj = re.match(self._VALID_URL, url)
@@ -461,9 +453,20 @@ class PornHubPagedPlaylistBaseIE(PornHubPlaylistBaseIE):
 
         page = int_or_none(self._search_regex(
             r'\bpage=(\d+)', url, 'page', default=None))
-
+        
+        webpage = self._download_webpage(
+                url, item_id)
+ 
+        playlist = self._parse_json(
+            self._search_regex(
+                r'(?:playlistObject|PLAYLIST_VIEW)\s*=\s*({.+?});', webpage,
+                'playlist', default='{}'), 1)
+        
+        video_count = int_or_none(playlist.get('video_count'))
+        page_range = range(1, int(video_count / 36) + (video_count % 36 > 0) + 1) if video_count is not None else None
         entries = []
-        for page_num in (page, ) if page is not None else itertools.count(1):
+
+        for page_num in page_range if page_range is not None else itertools.count(1):
             try:
                 webpage = self._download_webpage(
                     url, item_id, 'Downloading page %d' % page_num,
@@ -476,8 +479,6 @@ class PornHubPagedPlaylistBaseIE(PornHubPlaylistBaseIE):
             if not page_entries:
                 break
             entries.extend(page_entries)
-            if not self._has_more(webpage):
-                break
 
         return self.playlist_result(orderedSet(entries), item_id)
 
